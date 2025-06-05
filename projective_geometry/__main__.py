@@ -858,7 +858,7 @@ def camera_retrieval_test(output: Path = PROJECT_LOCATION / "results/celtics_ret
     ]
     points_template_2d = tuple(Point2D(x=pt.x, y=pt.y) for pt in points_template)
 
-    camera = Camera.from_point_correspondences(pts_source=points_template_2d, pts_target=points_frame)
+    _ = Camera.from_point_correspondences(pts_source=points_template_2d, pts_target=points_frame)
 
     # project basketball court template
     basketball_court = BasketballCourtTemplate()
