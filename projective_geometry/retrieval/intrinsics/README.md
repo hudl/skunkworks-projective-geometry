@@ -143,12 +143,12 @@ $$
 ### Unit aspect ratio
 We have the condition $w_0 = w_2$, so our second row in A will be:
 <p align="center">
-  <img src="condition2.png" alt="alt text">
+  <img src="../../../data/condition2.png" alt="alt text">
 </p>
 
 Notice from Eq.(8) that
 <p align="center">
-  <img src="focal.png" alt="alt text">
+  <img src="../../../data/focal.png" alt="alt text">
 </p>
 so we are effectively imposing $f_x = f_y = f$, which is the unit aspect ratio condition.
 
@@ -181,7 +181,7 @@ $$
 
 which leads to the third row in A:
 <p align="center">
-  <img src="condition3.png" alt="alt text">
+  <img src="../../../data/condition3.png" alt="alt text">
 </p>
 <!-- $$
 \begin{equation}
@@ -224,7 +224,7 @@ $$
 
 Substituting the values of $v_1$ and $v_2$ we get:
 <p align="center">
-  <img src="system1.png" alt="alt text">
+  <img src="../../../data/system1.png" alt="alt text">
 </p>
 <!-- $$
 \begin{equation}
@@ -274,7 +274,7 @@ It would not be rare to observe that some set of parallel lines remain parallel 
 
 Replacing on the condition for vanishing points from perpendicular rays, we get:
 <p align="center">
-  <img src="system2.png" alt="alt text">
+  <img src="../../../data/system2.png" alt="alt text">
 </p>
 <!-- $$
 \begin{equation}
@@ -292,7 +292,7 @@ $$ -->
 
 which reduces to:
 <p align="center">
-  <img src="system3.png" alt="alt text">
+  <img src="../../../data/system3.png" alt="alt text">
 </p>
 <!-- $$
 \begin{equation}
@@ -309,7 +309,7 @@ $$ -->
 
 This gives us the fifth row in A:
 <p align="center">
-  <img src="condition5.png" alt="alt text">
+  <img src="../../../data/condition5.png" alt="alt text">
 </p>
 <!-- $$
 a_5 = [

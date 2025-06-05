@@ -146,6 +146,32 @@ def project_pitch_template(
 _NEAR_ZERO_Z = 1e-6
 
 
+def _clip_normalized_camera_points(
+    normalized_camera_points: np.ndarray, sensor_wh: np.ndarray, focal_length_xy: np.ndarray
+) -> np.ndarray:
+    """Clip normalized camera points to the sensor bounds.
+
+    Args:
+        normalized_camera_points: Normalized camera coordinates.
+        sensor_wh: Sensor width and height.
+        focal_length_xy: Focal length in x and y dimensions.
+
+    Returns:
+        Filtered normalized camera points that are within bounds
+    """
+    x_max = sensor_wh[0] / 2 / (focal_length_xy[0] * sensor_wh[0])
+    x_min = -x_max
+    y_max = sensor_wh[1] / 2 / (focal_length_xy[1] * sensor_wh[1])
+    y_min = -y_max
+    mask = (
+        (normalized_camera_points[:, 0] >= x_min)
+        & (normalized_camera_points[:, 0] <= x_max)
+        & (normalized_camera_points[:, 1] >= y_min)
+        & (normalized_camera_points[:, 1] <= y_max)
+    )
+    return normalized_camera_points[mask]
+
+
 def _distort(normalized_camera_points: np.ndarray, distortion_coefficients: np.ndarray) -> np.ndarray:
     """Apply distortion to normalized camera coordinates.
 
@@ -209,6 +235,8 @@ def project_to_sensor(camera: Camera2, world_points: Sequence[Point3D]) -> Tuple
 
     normalized_camera_points = camera_points / camera_points[2]
     normalized_camera_points = normalized_camera_points[:2].T
+
+    normalized_camera_points = _clip_normalized_camera_points(normalized_camera_points, sensor_wh, focal_length_xy)
 
     distorted_points = _distort(normalized_camera_points, distortion_coefficients)
 
