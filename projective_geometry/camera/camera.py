@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Tuple
+from typing import Sequence, Tuple
 
 import cv2
 import numpy as np
@@ -10,12 +10,11 @@ from projective_geometry.camera.camera_params import CameraParams
 from projective_geometry.draw.image_size import ImageSize
 from projective_geometry.geometry.ellipse import Ellipse
 from projective_geometry.geometry.line import Line
-from projective_geometry.geometry.point import Point
+from projective_geometry.geometry.point import Point2D
 from projective_geometry.image_registration.register import (
     ImageRegistrator,
     MatchedKeypoints,
 )
-from projective_geometry.utils.rotation import rotation_matrix_from_angles
 
 
 class Camera:
@@ -68,7 +67,7 @@ class Camera:
         return Line(a=horizon_line[0], b=horizon_line[1], c=horizon_line[2])
 
     @staticmethod
-    def _get_matrix_from_point_correspondences(pts_source: List[Point], pts_target: List[Point]) -> np.ndarray:
+    def _get_matrix_from_point_correspondences(pts_source: Sequence[Point2D], pts_target: Sequence[Point2D]) -> np.ndarray:
         """
         Method to generate the auxiliary matrix for point correspondences defined in Eq.(10) in
         https://inakiraba91.github.io/projective-geometry-estimating-the-homography-matrix.html
@@ -101,7 +100,7 @@ class Camera:
         return np.concatenate(matrices_pt, axis=0)
 
     @staticmethod
-    def _get_matrix_from_line_correspondences(lines_source: List[Line], lines_target: List[Line]) -> np.ndarray:
+    def _get_matrix_from_line_correspondences(lines_source: Sequence[Line], lines_target: Sequence[Line]) -> np.ndarray:
         """
         Method to generate the auxiliary matrix for line correspondences defined in
         https://inakiraba91.github.io/projective-geometry-estimating-the-homography-matrix.html
@@ -136,7 +135,7 @@ class Camera:
 
     @staticmethod
     def _get_matrix_from_multiple_ellipse_correspondences(
-        ellipses_source: List[Ellipse], ellipses_target: List[Ellipse]
+        ellipses_source: Sequence[Ellipse], ellipses_target: Sequence[Ellipse]
     ) -> np.ndarray:
         """
         Method to generate the auxiliary matrix for ellipse correspondences defined in
@@ -209,7 +208,7 @@ class Camera:
         return cls(H=H)
 
     @classmethod
-    def from_point_correspondences(cls, pts_source: List[Point], pts_target: List[Point]) -> "Camera":
+    def from_point_correspondences(cls, pts_source: Sequence[Point2D], pts_target: Sequence[Point2D]) -> "Camera":
         """
         Method to generate the homography from point correspondences. The method uses the
         SVD as explained in https://inakiraba91.github.io/projective-geometry-estimating-the-homography-matrix.html
@@ -235,7 +234,7 @@ class Camera:
         return cls._compute_homography_from_aux_matrix(A=A)
 
     @classmethod
-    def from_line_correspondences(cls, lines_source: List[Line], lines_target: List[Line]) -> "Camera":
+    def from_line_correspondences(cls, lines_source: Sequence[Line], lines_target: Sequence[Line]) -> "Camera":
         """
         Method to generate the homography from line correspondences. The method uses the
         SVD as explained in https://inakiraba91.github.io/projective-geometry-estimating-the-homography-matrix.html
@@ -261,7 +260,9 @@ class Camera:
         return cls._compute_homography_from_aux_matrix(A=A)
 
     @classmethod
-    def from_multiple_ellipse_correspondences(cls, ellipses_source: List[Ellipse], ellipses_target: List[Ellipse]) -> "Camera":
+    def from_multiple_ellipse_correspondences(
+        cls, ellipses_source: Sequence[Ellipse], ellipses_target: Sequence[Ellipse]
+    ) -> "Camera":
         """
         Method to generate the homography from point correspondences. The method uses the
         SVD as explained in https://inakiraba91.github.io/projective-geometry-estimating-the-homography-matrix.html
@@ -289,12 +290,12 @@ class Camera:
     @classmethod
     def from_correspondences(
         cls,
-        pts_source: List[Point],
-        pts_target: List[Point],
-        lines_source: List[Line],
-        lines_target: List[Line],
-        ellipses_source: List[Ellipse],
-        ellipses_target: List[Ellipse],
+        pts_source: Sequence[Point2D],
+        pts_target: Sequence[Point2D],
+        lines_source: Sequence[Line],
+        lines_target: Sequence[Line],
+        ellipses_source: Sequence[Ellipse],
+        ellipses_target: Sequence[Ellipse],
     ) -> "Camera":
         """
         Method to generate the homography from geometric correspondences. The method uses the
@@ -322,8 +323,8 @@ class Camera:
     @classmethod
     def from_point_correspondences_cv2(
         cls,
-        pts_source: List[Point],
-        pts_target: List[Point],
+        pts_source: Sequence[Point2D],
+        pts_target: Sequence[Point2D],
         ransac: bool = False,
     ) -> "Camera":
         """
@@ -411,11 +412,10 @@ class Camera:
             Camera from given params
         """
         camera_pose = camera_params.camera_pose
-        tx, ty, tz = camera_pose.tx, camera_pose.ty, camera_pose.tz
-        rx, ry, rz = camera_pose.rx, camera_pose.ry, camera_pose.rz
-        Rc = rotation_matrix_from_angles(rx=rx, ry=ry, rz=rz)
+        rot_angles = [camera_pose.roll, camera_pose.tilt, camera_pose.pan]
+        Rc = Rotation.from_euler("xyz", rot_angles, degrees=True).as_matrix()
         R = Rc.T  # transpose
-        t = np.array([[tx], [ty], [tz]])
+        t = np.array([[camera_pose.tx], [camera_pose.ty], [camera_pose.tz]])
         T = -Rc.T.dot(t)
         K = cls.intrinsic_matrix_from_focal_length(focal_length=camera_params.focal_length, image_size=image_size)
         E = np.concatenate((R, T), axis=1)

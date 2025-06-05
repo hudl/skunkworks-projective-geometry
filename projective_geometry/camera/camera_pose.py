@@ -4,6 +4,8 @@ from typing import Any
 
 import numpy as np
 
+from .geometry import roll_tilt_pan_to_rotation_matrix
+
 
 class CameraPose:
     """Class with camera pose parameters including 3D location/orientation of the camera.
@@ -15,22 +17,35 @@ class CameraPose:
         rx: rotation around x-axis
         ry: rotation around y-axis
         rz: rotation around z-axis
-    """        
+    """
 
-    def __init__(self, tx: float, ty: float, tz: float, rx: float, ry: float, rz: float):
+    def __init__(self, tx: float, ty: float, tz: float, roll: float, tilt: float, pan: float):
         self.tx = tx
         self.ty = ty
         self.tz = tz
-        self.rx = rx
-        self.ry = ry
-        self.rz = rz
+        self.roll = roll
+        self.tilt = tilt
+        self.pan = pan
 
     def to_array(self) -> np.ndarray:
         """Converts to numpy array
         Returns:
             ndarray  [tx, ty, tz, rx, ry, rz]
         """
-        return np.array([self.tx, self.ty, self.tz, self.rx, self.ry, self.rz])
+        return np.array([self.tx, self.ty, self.tz, self.roll, self.tilt, self.pan])
+
+    @property
+    def postion_xyz(self) -> np.ndarray:
+        """Returns the position of the camera in 3D space as a numpy array."""
+        return np.array([self.tx, self.ty, self.tz])
+
+    @property
+    def rotation_matrix(self) -> np.ndarray:
+        """Calculates the rotation matrix based on roll, tilt, and pan angles.
+        Returns:
+            3x3 numpy array representing the rotation matrix.
+        """
+        return roll_tilt_pan_to_rotation_matrix(self.roll, self.tilt, self.pan)
 
     def __eq__(self, other: Any, tol: float = 1e-6):
         """Performs the equality comparison between current object and passed one.
@@ -45,4 +60,4 @@ class CameraPose:
         return False
 
     def __repr__(self):
-        return f"CameraPose(tx={self.tx}, ty={self.ty}, tz={self.tz}, rx={self.rx}, ry={self.ry}, rz={self.rz})"
+        return f"CameraPose(tx={self.tx}, ty={self.ty}, tz={self.tz}, roll={self.roll}, tilt={self.tilt}, pan={self.pan})"

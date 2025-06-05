@@ -1,12 +1,14 @@
+import cv2
 import numpy as np
+
 from projective_geometry.camera.camera import Camera
 from projective_geometry.camera.camera_params import CameraParams
 from projective_geometry.camera.camera_pose import CameraPose
 from projective_geometry.draw.colors import Color
 from projective_geometry.draw.image_size import BASE_IMAGE_SIZE
-from projective_geometry.pitch_template.basketball_template import BasketballCourtTemplate
-import cv2
-
+from projective_geometry.pitch_template.basketball_template import (
+    BasketballCourtTemplate,
+)
 from projective_geometry.projection.projectors import project_pitch_template
 
 
@@ -27,15 +29,15 @@ def generate_video_virtual_trajectory_camera(video_path: str):
     image_size = BASE_IMAGE_SIZE
     out = cv2.VideoWriter(
         video_path,
-        cv2.VideoWriter_fourcc("M", "J", "P", "G"),
-        fps, 
+        cv2.VideoWriter.fourcc("M", "J", "P", "G"),
+        fps,
         (image_size.width, image_size.height),
     )
     for tx, f in zip(txs, fs):
         frame = np.zeros((image_size.height, image_size.width, 3), dtype=np.uint8)
         camera = Camera.from_camera_params(
             camera_params=CameraParams(
-                camera_pose=CameraPose(tx=tx, ty=ty, tz=tz, rx=rx, ry=ry, rz=rz),
+                camera_pose=CameraPose(tx=tx, ty=ty, tz=tz, roll=rx, tilt=ry, pan=rz),
                 focal_length=f,
             ),
             image_size=image_size,
