@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Self, Sequence, Tuple
+from typing import Literal, Self, Sequence, Tuple, TypeAlias
 
 import numpy as np
 
@@ -11,10 +11,13 @@ from projective_geometry.camera.geometry import (
     calculate_camera_pose_and_distortion,
     calculate_focal_length_from_homography,
     calculate_homography,
+    calibrate,
     convert_intrinsics_to_calibration_matrix,
     rotation_matrix_to_roll_tilt_pan,
 )
 from projective_geometry.geometry.point import Point2D, Point3D
+
+FocalLengthOptimization: TypeAlias = Literal["homography", "calibrate"]
 
 
 class Camera2:
@@ -95,6 +98,77 @@ class Camera2:
                 ),
                 focal_length_xy=focal_length_xy,
             ),
+        )
+
+    def update_from_keypoint_correspondences(
+        self,
+        world_points: Sequence[Point3D],
+        image_points: Sequence[Point2D],
+        focal_length_optimization: FocalLengthOptimization = "homography",
+    ) -> None:
+        """Update the camera parameters from keypoint correspondences.
+
+        Parameters
+        ----------
+        world_points
+            The world points.
+        image_points
+            The image points.
+        focal_length_optimization
+            The method to use for focal length optimization.
+
+        Returns
+        -------
+        camera
+            The updated Camera object.
+        """
+        world_points_arr = np.array([pt.to_array() for pt in world_points])
+        image_points_arr = np.array([pt.to_array() for pt in image_points])
+
+        world_points_arr = world_points_arr.astype(np.float32)
+        image_points_arr = image_points_arr.astype(np.float32)
+
+        if focal_length_optimization == "homography":
+            homography_matrix = calculate_homography(world_points_arr, image_points_arr, alpha=0)
+            success, focal_length_xy = calculate_focal_length_from_homography(homography_matrix, self.sensor_wh)
+            if not success:
+                msg = "Failed to estimate focal length automatically."
+                raise ValueError(msg)
+        else:
+            focal_length_xy = self.camera_params.focal_length_xy
+
+        calibration_matrix = convert_intrinsics_to_calibration_matrix(self.sensor_wh, focal_length_xy)
+
+        if focal_length_optimization == "homography":
+            rotation_matrix, position_xyz, _ = calibrate(
+                world_points_arr,
+                image_points_arr,
+                calibration_matrix,
+                self.camera_params.camera_distorion.to_array(),
+                optimize_focal_length=False,
+            )
+        else:
+            rotation_matrix, position_xyz, focal_length_xy = calibrate(
+                world_points_arr,
+                image_points_arr,
+                calibration_matrix,
+                self.camera_params.camera_distorion.to_array(),
+                optimize_focal_length=True,
+            )
+
+        roll, tilt, pan = rotation_matrix_to_roll_tilt_pan(rotation_matrix)
+
+        self.camera_params = CameraParams2(
+            camera_pose=CameraPose(
+                tx=position_xyz[0],
+                ty=position_xyz[1],
+                tz=position_xyz[2],
+                roll=roll,
+                tilt=tilt,
+                pan=pan,
+            ),
+            camera_distortion=self.camera_params.camera_distorion,
+            focal_length_xy=focal_length_xy,
         )
 
     def __repr__(self):

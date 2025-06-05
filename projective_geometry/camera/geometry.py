@@ -272,3 +272,40 @@ def calculate_camera_pose_and_distortion(
     logger.info(f"Root Mean Squared Re-Projection Error: {rmsre}")
     assert isinstance(distortion_coefficients, np.ndarray)
     return rotation_matrix, position_xyz, distortion_coefficients[0]
+
+
+def calibrate(
+    world_points: KeyPoints3D,
+    image_points: KeyPoints2D,
+    calibration_matrix: CalibrationMatrix,
+    distortion_coefficients: DistortionCoefficients,
+    optimize_focal_length: bool = True,
+) -> tuple[RotationMatrix3D, Vector3D, Vector2D]:
+
+    world_points = world_points.astype(np.float32)
+    image_points = image_points.astype(np.float32)
+
+    sensor_wh, _ = convert_calibration_matrix_to_intrinsics(calibration_matrix)
+
+    rmsre, calibration_matrix, distortion_coefficients, rvec, tvec = cv2.calibrateCamera(  # type: ignore[assignment]
+        objectPoints=[world_points],
+        imagePoints=[image_points],
+        imageSize=(int(sensor_wh[0]), int(sensor_wh[1])),
+        cameraMatrix=calibration_matrix,
+        distCoeffs=distortion_coefficients,  # type: ignore[arg-type]
+        flags=(
+            cv2.CALIB_USE_INTRINSIC_GUESS + cv2.CALIB_FIX_ASPECT_RATIO + cv2.CALIB_FIX_PRINCIPAL_POINT + 0
+            if optimize_focal_length
+            else cv2.CALIB_FIX_FOCAL_LENGTH
+            + cv2.CALIB_FIX_TANGENT_DIST
+            + cv2.CALIB_FIX_K1
+            + cv2.CALIB_FIX_K2
+            + cv2.CALIB_FIX_K3
+        ),
+    )  # type: ignore[call-overload]
+
+    rotation_matrix, position_xyz = convert_rvec_tvec_to_camera_pose(rvec, tvec)  # type: ignore[arg-type]
+
+    logger.info(f"Root Mean Squared Re-Projection Error: {rmsre}")
+    focal_length_xy = np.array([calibration_matrix[0, 0], calibration_matrix[1, 1]]) / sensor_wh
+    return rotation_matrix, position_xyz, focal_length_xy
