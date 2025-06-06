@@ -4,9 +4,13 @@ from typing import Any, Tuple
 import cv2
 import numpy as np
 from typer import Typer
+from copy import deepcopy
 
 from projective_geometry.camera import Camera, CameraParams, CameraPose
+from projective_geometry.camera.camera_params import CameraParams2
+from projective_geometry.camera.camera_distortion import CameraDistortion
 from projective_geometry.camera.camera2 import Camera2
+from projective_geometry.camera.geometry import roll_tilt_pan_to_rotation_matrix
 from projective_geometry.draw import Color
 from projective_geometry.draw.image_size import ImageSize
 from projective_geometry.geometry import Ellipse, Line, Point2D, Point3D
@@ -915,6 +919,223 @@ def camera_retrieval_test():
     print(f"RMSE World: {rmse_world} m")
     output = PROJECT_LOCATION / "results/celtics_retrieval.png"
     cv2.imwrite(output.as_posix(), np.concatenate((frame, basketball_court_img), axis=1))
+
+
+    import rerun as rr
+    from rerun.datatypes import Angle, RotationAxisAngle
+    from scipy.spatial.transform import Rotation as R
+
+    def _draw_marker(name: str, point) -> None:
+        rr.log(
+            name,
+            rr.Points3D(
+                point.to_array(),
+                radii=0.05,
+                colors=(255, 0, 0),
+            ),
+        )
+
+
+    def _draw_markers(markers) -> None:
+        for i, point in enumerate(markers):
+            _draw_marker(f"{i}", point)
+
+    def _draw_camera(
+        identifier: str, camera: Camera2, image_plane_distance: float | None = None
+    ) -> None:
+        
+        print(f"Camera pose: {camera}")
+
+        camera_pose = camera.camera_params.camera_pose
+        position = camera_pose.postion_xyz
+        roll, tilt, pan = camera_pose.roll, camera_pose.tilt, camera_pose.pan
+        
+        print(roll, tilt, pan)
+        rotation_matrix = roll_tilt_pan_to_rotation_matrix(roll=roll, tilt=tilt, pan=pan)
+        
+        
+        rr.log(
+            f"camera_{identifier}",
+            rr.Transform3D(
+                translation=position,
+                rotation=rr.Quaternion(xyzw=R.from_matrix(rotation_matrix.T).as_quat()),
+            ),
+        )
+
+        rr.log(
+            f"camera_{identifier}",
+            rr.Pinhole(
+                focal_length=camera.camera_params.focal_length_xy * camera.sensor_wh,
+                width=camera.sensor_wh[0],
+                height=camera.sensor_wh[1],
+                camera_xyz=rr.ViewCoordinates.RDF,
+                principal_point=camera.sensor_wh / 2,
+                image_plane_distance=image_plane_distance,
+            ),
+        )
+        rr.log(
+            f"camera_{identifier}",
+            rr.Image(
+                frame2[..., ::-1],  # white image
+                color_model="RGB",
+            ),
+        )
+
+    rr.init("test")
+    rr.spawn()
+    _draw_markers(keypoints)
+    _draw_camera("camera", camera, image_plane_distance=5)
+
+
+import rerun as rr
+from rerun.datatypes import Angle, RotationAxisAngle
+from scipy.spatial.transform import Rotation as R
+
+def _draw_marker(name: str, point, colors=(255, 0, 0)) -> None:
+    rr.log(
+        name,
+        rr.Points3D(
+            point.to_array(),
+            radii=0.05,
+            colors=colors,
+        ),
+    )
+
+
+def _draw_markers(identifier: str, markers, colors=(255, 0, 0)) -> None:
+    for i, point in enumerate(markers):
+        _draw_marker(f"{identifier}_{i}", point, colors)
+
+def _draw_camera(
+    identifier: str, camera: Camera2, frame: np.ndarray, image_plane_distance: float | None = None, frame_idx: int =0,
+) -> None:
+    
+    # rr.set_time_sequence("frame", frame_idx)
+    
+    camera_pose = camera.camera_params.camera_pose
+    position = camera_pose.postion_xyz
+    roll, tilt, pan = camera_pose.roll, camera_pose.tilt, camera_pose.pan
+    
+    rotation_matrix = roll_tilt_pan_to_rotation_matrix(roll=roll, tilt=tilt, pan=pan)
+    
+    
+    rr.log(
+        f"camera_{identifier}",
+        rr.Transform3D(
+            translation=position,
+            rotation=rr.Quaternion(xyzw=R.from_matrix(rotation_matrix.T).as_quat()),
+        ),
+    )
+
+    rr.log(
+        f"camera_{identifier}",
+        rr.Pinhole(
+            focal_length=camera.camera_params.focal_length_xy * camera.sensor_wh,
+            width=camera.sensor_wh[0],
+            height=camera.sensor_wh[1],
+            camera_xyz=rr.ViewCoordinates.RDF,
+            principal_point=camera.sensor_wh / 2,
+            image_plane_distance=image_plane_distance,
+        ),
+    )
+    rr.log(
+        f"camera_{identifier}",
+        rr.Image(
+            frame,  # white image
+            color_model="RGB",
+        ),
+    )
+
+@cli_app.command()
+def camera_tracking_test():
+    def _simulate_camera_trajectory() -> tuple[list[Camera2], BasketballCourtTemplate]:
+        video_length = 10  # seconds
+        fps = 25  # frames per second
+        num_frames = video_length * fps
+        basketball_court = BasketballCourtTemplate()
+        f_start, f_end = 2.5 * 920, 2.5 * 2 * 1280,
+        tx_start, tx_end = 5, -1
+        ty = 40
+        tz = -15
+        rx = 18
+        ry = 0
+        rz = -70
+        txs = np.linspace(tx_start, tx_end, num_frames)
+        fs = np.linspace(f_start, f_end, num_frames)
+        sensor_wh = 1920, 1080
+
+        cameras = []
+        for tx, f in zip(txs, fs):
+            fx, fy = f / sensor_wh[0], f / sensor_wh[1]
+            camera = Camera2(
+                sensor_wh=sensor_wh,
+                camera_params=CameraParams2(
+                    camera_pose=CameraPose(tx=tx, ty=ty, tz=tz, roll=rx, tilt=ry, pan=rz),
+                    camera_distortion=CameraDistortion(
+                        k1=-0.01, k2=1.0, p1=-0.002, p2=-0.007, k3=-10
+                    ),
+                    focal_length_xy=(fx, fy)
+                ),
+            )
+            cameras.append(camera)
+        return cameras, basketball_court
+    
+    cameras, basketball_court = _simulate_camera_trajectory()
+    keypoints = tuple(Point3D(x=pt.x, y=pt.y) for pt in basketball_court.keypoints)
+
+    num_x, num_y = 13, 9
+    W2, H2 = BasketballCourtTemplate.PITCH_WIDTH / 2, BasketballCourtTemplate.PITCH_HEIGHT / 2
+    grid_template = tuple(Point3D(x=x, y=y) for x in np.linspace(-W2, W2, num_x) for y in np.linspace(-H2, H2, num_y))
+
+    frames = []
+    frames2 = []
+    estimated_cameras = []
+    for j, camera in enumerate(cameras):
+        frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        points_frame, _ = project_to_sensor(camera, keypoints)
+        for pt in points_frame:
+            pt.draw(img=frame, color=Color.ORANGE, radius=PT_RADIUS // 2, thickness=PT_THICKNESS // 2)
+        frames.append(frame)
+    
+        noisy_grid_template = tuple(
+            Point3D(x=pt.x + np.random.normal(0, 0.1), y=pt.y + np.random.normal(0, 0.1)) for pt in grid_template
+        )
+        grid_frame, valid = project_to_sensor(camera, grid_template)
+        points_template, points_frame = [], []
+        for pt_frame, i in zip(grid_frame, valid, strict=True):
+                points_template.append(Point3D(x=grid_template[i].x, y=grid_template[i].y))
+                points_frame.append(pt_frame)
+
+
+        estimated_camera = Camera2.from_keypoint_correspondences(points_template, points_frame, sensor_wh=(1920, 1080))
+
+        # if j == 0:
+        #     estimated_camera = Camera2.from_keypoint_correspondences(points_template, points_frame, sensor_wh=(1920, 1080))
+        # else:
+        #     estimated_camera.update_from_keypoint_correspondences(
+        #         points_template,
+        #         points_frame,
+        #         "calibrate",
+        #     )
+        estimated_cameras.append(deepcopy(estimated_camera))
+
+        frame2 = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        points_frame, _ = project_to_sensor(estimated_camera, keypoints)
+        for pt in points_frame:
+            pt.draw(img=frame2, color=Color.BLUE, radius=PT_RADIUS // 2, thickness=PT_THICKNESS // 2)
+        frames2.append(frame + frame2)
+
+    rr.init("test")
+    rr.spawn()
+    _draw_markers("grid", grid_template, colors=(0, 255, 0))
+    _draw_markers("noisygrid", noisy_grid_template, colors=(0, 0, 255))
+    _draw_markers("court", keypoints)
+    for (camera, estimated_camera, frame, frame2) in zip(cameras, estimated_cameras, frames, frames2, strict=True):
+        _draw_camera("camera", camera, frame=frame, image_plane_distance=5)
+        _draw_camera("estimated_camera", estimated_camera, frame=frame2, image_plane_distance=5)
+    
+    
+
 
 
 def visualize():

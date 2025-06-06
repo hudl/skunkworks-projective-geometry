@@ -214,7 +214,6 @@ def convert_rvec_tvec_to_camera_pose(rvec: Vector3D, tvec: Vector3D) -> tuple[Ro
     position_xyz = -rotation_matrix.T @ np.asarray(tvec).flatten()
     return rotation_matrix, position_xyz
 
-
 def calculate_camera_pose_and_distortion(
     world_points: KeyPoints3D,
     image_points: KeyPoints2D,
@@ -294,9 +293,7 @@ def calibrate(
         cameraMatrix=calibration_matrix,
         distCoeffs=distortion_coefficients,  # type: ignore[arg-type]
         flags=(
-            cv2.CALIB_USE_INTRINSIC_GUESS + cv2.CALIB_FIX_ASPECT_RATIO + cv2.CALIB_FIX_PRINCIPAL_POINT + 0
-            if optimize_focal_length
-            else cv2.CALIB_FIX_FOCAL_LENGTH
+            cv2.CALIB_USE_INTRINSIC_GUESS + cv2.CALIB_FIX_ASPECT_RATIO + cv2.CALIB_FIX_PRINCIPAL_POINT +
             + cv2.CALIB_FIX_TANGENT_DIST
             + cv2.CALIB_FIX_K1
             + cv2.CALIB_FIX_K2
