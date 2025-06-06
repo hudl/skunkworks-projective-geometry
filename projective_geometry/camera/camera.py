@@ -4,7 +4,6 @@ from typing import Sequence, Tuple
 
 import cv2
 import numpy as np
-from scipy.spatial.transform import Rotation
 
 from projective_geometry.camera.camera_params import CameraParams
 from projective_geometry.draw.image_size import ImageSize
@@ -411,11 +410,8 @@ class Camera:
         Returns:
             Camera from given params
         """
-        camera_pose = camera_params.camera_pose
-        rot_angles = [camera_pose.roll, camera_pose.tilt, camera_pose.pan]
-        Rc = Rotation.from_euler("xyz", rot_angles, degrees=True).as_matrix()
+        Rc, t = camera_params.camera_pose.to_Rt()
         R = Rc.T  # transpose
-        t = np.array([[camera_pose.tx], [camera_pose.ty], [camera_pose.tz]])
         T = -Rc.T.dot(t)
         K = cls.intrinsic_matrix_from_focal_length(focal_length=camera_params.focal_length, image_size=image_size)
         E = np.concatenate((R, T), axis=1)

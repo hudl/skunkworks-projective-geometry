@@ -12,9 +12,9 @@ from projective_geometry.camera.geometry import (
     calculate_focal_length_from_homography,
     calculate_homography,
     convert_intrinsics_to_calibration_matrix,
-    rotation_matrix_to_roll_tilt_pan,
 )
 from projective_geometry.geometry.point import Point2D, Point3D
+from projective_geometry.utils.rotation import angles_from_rotation_matrix
 
 
 class Camera2:
@@ -73,7 +73,7 @@ class Camera2:
             calibration_matrix,
         )
 
-        roll, tilt, pan = rotation_matrix_to_roll_tilt_pan(rotation_matrix)
+        rx, ry, rz = angles_from_rotation_matrix(R=rotation_matrix)
 
         return cls(
             sensor_wh=sensor_wh,
@@ -82,9 +82,9 @@ class Camera2:
                     tx=position_xyz[0],
                     ty=position_xyz[1],
                     tz=position_xyz[2],
-                    roll=roll,
-                    tilt=tilt,
-                    pan=pan,
+                    rx=rx,
+                    ry=ry,
+                    rz=rz,
                 ),
                 camera_distortion=CameraDistortion(
                     k1=distortion_coefficients[0],
