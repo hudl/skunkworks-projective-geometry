@@ -18,6 +18,7 @@ from projective_geometry.pitch_template.basketball_template import (
 from projective_geometry.projection.projectors import (
     project_conics,
     project_pitch_template,
+    project_points,
     project_to_sensor,
     project_to_world,
 )
@@ -798,7 +799,7 @@ def camera_calibration_test(
     camera = Camera2.from_keypoint_correspondences(world_points, image_points, sensor_wh)
     print(f"Intrinsic matrix: \n{camera}")
 
-    image_point2 = project_to_sensor(camera, world_points)
+    image_point2, _ = project_to_sensor(camera, world_points)
 
     rmse_image = np.mean(
         [np.linalg.norm(pt1.to_array() - pt2.to_array()) for pt1, pt2 in zip(image_points, image_point2, strict=True)]
@@ -838,7 +839,14 @@ def camera_calibration_test(
 
 
 @cli_app.command()
-def camera_retrieval_test(output: Path = PROJECT_LOCATION / "results/celtics_retrieval.png"):
+def camera_retrieval_test():
+    basketball_court = BasketballCourtTemplate()
+    frame = cv2.imread(IMG_CELTICS_FPATH.as_posix())
+    sensor_wh = frame.shape[:2][::-1]
+    image_size = ImageSize(width=frame.shape[1], height=frame.shape[0])
+    basketball_court_img = basketball_court.draw(image_size=image_size, color=Color.WHITE)
+
+    # obtain camera from annotated points
     W2, H2 = BasketballCourtTemplate.PITCH_WIDTH / 2, BasketballCourtTemplate.PITCH_HEIGHT / 2
     points_frame = [
         Point2D(x=845, y=290),
@@ -856,46 +864,56 @@ def camera_retrieval_test(output: Path = PROJECT_LOCATION / "results/celtics_ret
         Point3D(x=-W2 + 28 * FOOT + 12 * INCH, y=0),
         Point3D(x=-W2 + 19 * FOOT, y=-8 * FOOT),
     ]
-    points_template_2d = tuple(Point2D(x=pt.x, y=pt.y) for pt in points_template)
+    camera = Camera.from_point_correspondences(pts_source=points_template, pts_target=points_frame)
 
-    _ = Camera.from_point_correspondences(pts_source=points_template_2d, pts_target=points_frame)
+    # define grid
+    num_x, num_y = 13, 9
+    grid_template = tuple(Point2D(x=x, y=y) for x in np.linspace(-W2, W2, num_x) for y in np.linspace(-H2, H2, num_y))
+    grid_frame = project_points(camera=camera, pts=grid_template)
+    points_template, points_frame = [], []
+    for pt_frame, pt_template in zip(grid_frame, grid_template, strict=True):
+        if 0 <= pt_frame.x < image_size.width and 0 <= pt_frame.y < image_size.height:
+            points_template.append(Point3D(x=pt_template.x, y=pt_template.y))
+            points_frame.append(pt_frame)
 
-    # project basketball court template
-    basketball_court = BasketballCourtTemplate()
-    frame = cv2.imread(IMG_CELTICS_FPATH.as_posix())
-    sensor_wh = frame.shape[1], frame.shape[0]
-    image_size = ImageSize(width=frame.shape[1], height=frame.shape[0])
-    basketball_court_img = basketball_court.draw(image_size=image_size, color=Color.WHITE)
-
-    camera2 = Camera2.from_keypoint_correspondences(points_template, points_frame, sensor_wh)
+    camera = Camera2.from_keypoint_correspondences(points_template, points_frame, sensor_wh)
 
     keypoints = tuple(Point3D(x=pt.x, y=pt.y) for pt in basketball_court.keypoints)
-    keypoints_frame = project_to_sensor(camera2, keypoints)
+    img = np.zeros((image_size.height, image_size.width, 3), dtype=np.uint8)
+    for pt in keypoints:
+        pt = Point2D(x=pt.x, y=pt.y)
+        pt = basketball_court.pitch_template_to_pitch_image(geometric_feature=pt, image_size=image_size)
+        pt.draw(img=img, color=Color.ORANGE, radius=PT_RADIUS // 2, thickness=PT_THICKNESS // 2)
+    keypoints_frame, _ = project_to_sensor(camera, keypoints)
+    frame2 = frame.copy()
     for pt in keypoints_frame:
-        pt.draw(img=frame, color=Color.GREEN, radius=PT_RADIUS, thickness=PT_THICKNESS)
+        pt.draw(img=frame2, color=Color.ORANGE, radius=PT_RADIUS // 2, thickness=PT_THICKNESS // 2)
+    output = PROJECT_LOCATION / "results/celtics_retrieval_template.png"
+    cv2.imwrite(output.as_posix(), np.concatenate((frame2, img), axis=1))
 
-    points_frame2 = project_to_sensor(camera2, points_template)
+    points_frame2, indices_clipped = project_to_sensor(camera, points_template)
     rmses_image = []
-    for pt_i1, pt_i2 in zip(points_frame, points_frame2, strict=True):
+    for idx, pt_i2 in zip(indices_clipped, points_frame2, strict=True):
+        pt_i1 = points_frame[idx]
         pt_i1.draw(img=frame, color=Color.RED, radius=2 * PT_RADIUS, thickness=-1)
         pt_i2.draw(img=frame, color=Color.BLUE, radius=PT_RADIUS, thickness=PT_THICKNESS)
         rmses_image.append(np.linalg.norm(pt_i1.to_array() - pt_i2.to_array()))
     rmse_image = np.mean(rmses_image)
     print(f"RMSE Image: {rmse_image} px")
 
-    points_template2 = project_to_world(camera2, points_frame)
+    points_template2 = project_to_world(camera, points_frame)
     rmses_world = []
     for pt_w1, pt_w2 in zip(points_template, points_template2, strict=True):
-        new_pt_w1 = Point2D(x=pt_w1.x, y=pt_w1.y)
-        new_pt_w2 = Point2D(x=pt_w2.x, y=pt_w2.y)
-        pt_img1 = basketball_court.pitch_template_to_pitch_image(geometric_feature=new_pt_w1, image_size=image_size)
+        pt_w1 = Point2D(x=pt_w1.x, y=pt_w1.y)
+        pt_w2 = Point2D(x=pt_w2.x, y=pt_w2.y)
+        pt_img1 = basketball_court.pitch_template_to_pitch_image(geometric_feature=pt_w1, image_size=image_size)
         pt_img1.draw(img=basketball_court_img, color=Color.RED, radius=2 * PT_RADIUS, thickness=-1)
-        pt_img2 = basketball_court.pitch_template_to_pitch_image(geometric_feature=new_pt_w2, image_size=image_size)
+        pt_img2 = basketball_court.pitch_template_to_pitch_image(geometric_feature=pt_w2, image_size=image_size)
         pt_img2.draw(img=basketball_court_img, color=Color.BLUE, radius=PT_RADIUS, thickness=PT_THICKNESS)  # type: ignore
-        rmses_world.append(np.linalg.norm(new_pt_w1.to_array() - new_pt_w2.to_array()))
+        rmses_world.append(np.linalg.norm(pt_w1.to_array() - pt_w2.to_array()))
     rmse_world = np.mean(rmses_world)
     print(f"RMSE World: {rmse_world} m")
-
+    output = PROJECT_LOCATION / "results/celtics_retrieval.png"
     cv2.imwrite(output.as_posix(), np.concatenate((frame, basketball_court_img), axis=1))
 
 

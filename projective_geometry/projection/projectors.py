@@ -148,7 +148,7 @@ _NEAR_ZERO_Z = 1e-6
 
 def _clip_normalized_camera_points(
     normalized_camera_points: np.ndarray, sensor_wh: np.ndarray, focal_length_xy: np.ndarray
-) -> np.ndarray:
+) -> Tuple[np.ndarray, np.ndarray]:
     """Clip normalized camera points to the sensor bounds.
 
     Args:
@@ -169,7 +169,8 @@ def _clip_normalized_camera_points(
         & (normalized_camera_points[:, 1] >= y_min)
         & (normalized_camera_points[:, 1] <= y_max)
     )
-    return normalized_camera_points[mask]
+    indices = np.where(mask)[0]
+    return normalized_camera_points[mask], indices
 
 
 def _distort(normalized_camera_points: np.ndarray, distortion_coefficients: np.ndarray) -> np.ndarray:
@@ -204,7 +205,7 @@ def _distort(normalized_camera_points: np.ndarray, distortion_coefficients: np.n
     return np.c_[x_distorted, y_distorted]
 
 
-def project_to_sensor(camera: Camera2, world_points: Sequence[Point3D]) -> Tuple[Point2D, ...]:
+def project_to_sensor(camera: Camera2, world_points: Sequence[Point3D]) -> Tuple[Tuple[Point2D, ...], np.ndarray]:
     """Project points to the sensor plane of the camera.
 
     Args:
@@ -213,6 +214,7 @@ def project_to_sensor(camera: Camera2, world_points: Sequence[Point3D]) -> Tuple
 
     Returns:
         Projected points on the sensor plane.
+        Indices of points that were clipped to the sensor bounds.
     """
     positions_xyz = camera.camera_params.camera_pose.postion_xyz
     rotation_matrix = camera.camera_params.camera_pose.rotation_matrix
@@ -236,7 +238,9 @@ def project_to_sensor(camera: Camera2, world_points: Sequence[Point3D]) -> Tuple
     normalized_camera_points = camera_points / camera_points[2]
     normalized_camera_points = normalized_camera_points[:2].T
 
-    normalized_camera_points = _clip_normalized_camera_points(normalized_camera_points, sensor_wh, focal_length_xy)
+    normalized_camera_points, clipped_indices = _clip_normalized_camera_points(
+        normalized_camera_points, sensor_wh, focal_length_xy
+    )
 
     distorted_points = _distort(normalized_camera_points, distortion_coefficients)
 
@@ -244,7 +248,7 @@ def project_to_sensor(camera: Camera2, world_points: Sequence[Point3D]) -> Tuple
     y = distorted_points[..., 1] * (focal_length_xy[1] * sensor_wh[1]) + principal_point[1]
     image_points = np.c_[x, y]
 
-    return tuple(Point2D.from_array(pt) for pt in image_points)
+    return tuple(Point2D.from_array(pt) for pt in image_points), clipped_indices
 
 
 def _undistort(image_points: np.ndarray, distortion_coefficients: np.ndarray, calibration_matrix: np.ndarray) -> np.ndarray:
