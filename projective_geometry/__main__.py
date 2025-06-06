@@ -8,7 +8,7 @@ from typer import Typer
 from projective_geometry.camera import Camera, CameraParams, CameraPose
 from projective_geometry.camera.camera2 import Camera2
 from projective_geometry.draw import Color
-from projective_geometry.draw.image_size import ImageSize
+from projective_geometry.draw.image_size import BASE_IMAGE_SIZE, ImageSize
 from projective_geometry.geometry import Ellipse, Line, Point2D, Point3D
 from projective_geometry.geometry.conic import Conic
 from projective_geometry.geometry.line_segment import LineSegment
@@ -22,6 +22,10 @@ from projective_geometry.projection.projectors import (
     project_to_sensor,
     project_to_world,
 )
+from projective_geometry.retrieval.intrinsics.intrinsic_matrix import (
+    calculate_focal_length_from_homography,
+)
+from projective_geometry.solvers.p4p_solver import p4p
 from projective_geometry.utils.distances import FOOT, INCH
 from projective_geometry.visualization.virtual_trajectory import (
     generate_video_virtual_trajectory_camera,
@@ -43,7 +47,7 @@ BORDER = 15
 CAMERA_HEIGHT = 2 * IMG_DISPLAY_UNIT
 CAMERA = Camera.from_camera_params(
     camera_params=CameraParams(
-        camera_pose=CameraPose(tx=0, ty=0, tz=CAMERA_HEIGHT, roll=0, tilt=90, pan=0),
+        camera_pose=CameraPose(tx=0, ty=0, tz=CAMERA_HEIGHT, rx=0, ry=90, rz=0),
         focal_length=IMG_DISPLAY_UNIT,
     ),
     image_size=ImageSize(width=IMG_DISPLAY_UNIT, height=IMG_DISPLAY_UNIT),
@@ -917,6 +921,7 @@ def camera_retrieval_test():
     cv2.imwrite(output.as_posix(), np.concatenate((frame, basketball_court_img), axis=1))
 
 
+@cli_app.command()
 def visualize():
     show_camera_visualisation()
 
@@ -924,6 +929,39 @@ def visualize():
 @cli_app.command()
 def virtual_camera_trajectory():
     generate_video_virtual_trajectory_camera(video_path=PROJECT_LOCATION / "results/virtual_camera_trajectory.mp4")
+
+
+@cli_app.command()
+def camera_pose_from_four_points_demo():
+    f = 350
+    tx, ty, tz = -5, 5, 15
+    rx, ry, rz = -170, 10, 170
+
+    # project basketball court template
+    image_size = BASE_IMAGE_SIZE
+    w2, h2 = BASE_IMAGE_SIZE.width / 2, BASE_IMAGE_SIZE.height / 2
+    W2, H2 = BasketballCourtTemplate.PITCH_WIDTH / 2, BasketballCourtTemplate.PITCH_HEIGHT / 2
+    camera_pose = CameraPose(tx=tx, ty=ty, tz=tz, rx=rx, ry=ry, rz=rz)
+    camera_params = CameraParams(camera_pose=camera_pose, focal_length=f)
+    camera = Camera.from_camera_params(camera_params=camera_params, image_size=image_size)
+
+    pts_world = [
+        Point2D(x=-W2, y=-H2),
+        Point2D(x=-W2, y=H2),
+        Point2D(x=W2, y=-H2),
+        Point2D(x=W2, y=H2),
+    ]
+    pts_img = project_points(camera=camera, pts=pts_world)
+
+    pts_world_array = np.array([[pt.x, pt.y, 0] for pt in pts_world]).T
+
+    _, [fx_est, fy_est] = calculate_focal_length_from_homography(camera=camera, image_size=image_size)
+    f_est = (fx_est + fy_est) / 2
+    pts_img_cam_array = np.array([[pt.x - w2, pt.y - h2, f_est] for pt in pts_img]).T
+    camera_pose_est = p4p(pts_world_array, pts_img_cam_array)
+    camera_params_est = CameraParams(camera_pose=camera_pose_est, focal_length=f_est)
+    print(f"GT camera params: {camera_params}")
+    print(f"Estimated camera params: {camera_params_est}")
 
 
 # Program entry point redirection

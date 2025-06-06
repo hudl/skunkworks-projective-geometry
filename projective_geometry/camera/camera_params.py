@@ -83,7 +83,7 @@ class CameraParams2:
     def to_array(self) -> np.ndarray:
         """Converts to numpy array
         Returns:
-            ndarray  [tx, ty, tz, roll, tilt, pan, k1, k2, p1, p2, k3, focal_length]
+            ndarray  [tx, ty, tz, rx, ry, rz, k1, k2, p1, p2, k3, focal_length]
         """
         return np.concatenate((self.camera_pose.to_array(), self.camera_distorion.to_array(), self.focal_length_xy), axis=0)
 

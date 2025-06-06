@@ -5,7 +5,6 @@ from typing import TypeAlias
 
 import cv2
 import numpy as np
-from scipy.spatial.transform import Rotation as R
 
 logger = logging.getLogger(__name__)
 
@@ -26,17 +25,6 @@ Vector3D: TypeAlias = np.ndarray
 """3D vector."""
 DistortionCoefficients: TypeAlias = np.ndarray
 """Distortion coefficients, 1D array of coefficients for lens distortion."""
-
-
-def rotation_matrix_to_roll_tilt_pan(R_mat: RotationMatrix3D) -> tuple[float, float, float]:
-    r = R.from_matrix(R_mat)
-    roll, tilt, pan = r.as_euler("zyx", degrees=True)
-    return roll, tilt, pan
-
-
-def roll_tilt_pan_to_rotation_matrix(roll: float, tilt: float, pan: float) -> RotationMatrix3D:
-    r = R.from_euler("zyx", [roll, tilt, pan], degrees=True)
-    return r.as_matrix()
 
 
 def calculate_homography(world_points: KeyPoints2D, image_points: KeyPoints2D, alpha: float = 0.5) -> HomographyMatrix:
